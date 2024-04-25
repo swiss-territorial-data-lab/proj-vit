@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "example"
+version = "0.1.0"
+description = "example prject"
+authors = ["your name here"]
+readme = "README.md"
+
+[[tool.poetry.source]]
+name = "PyPI"
+priority = "primary"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+#Place your dependencies here
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
