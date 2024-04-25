@@ -24,12 +24,13 @@ RUN conda create -n mmseg -y python=3.9
 
 SHELL ["conda", "run", "-n", "mmseg", "/bin/bash", "-c"]
 
-RUN pip install torch==2.1.0 torchvision==0.16.0 torchaudio==2.1.0 --index-url https://download.pytorch.org/whl/cu121
-
-RUN conda install -c conda-forge gdal
-
-RUN pip install -U openmim ftfy regex rasterio\
+RUN conda run -n scalemae /bin/bash -c conda install -c conda-forge gdal
+    && pip install torch==2.1.0 torchvision==0.16.0 torchaudio==2.1.0 --index-url https://download.pytorch.org/whl/cu121
+    && pip install -U openmim ftfy regex rasterio tensorboardX future tensorboard\
+    && pip install albumentations>=0.3.2 --no-binary qudida,albumentations\
     && mim install mmengine \
     && mim install mmcv
 
-CMD /bin/bash
+RUN git clone https://github.com/swiss-territorial-data-lab/mmsegmentation.git
+WORKDIR "mmsegmentation"
+RUN pip install -v -e .
