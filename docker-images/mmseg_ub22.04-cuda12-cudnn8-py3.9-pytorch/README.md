@@ -1,21 +1,27 @@
-# ub22.04-py3.10
+# mmseg_ub22.04-cuda12-cudnn8-py3.9-pytorch
 
-Image ubuntu 22.04 avec python 3.10 et pip
+Docker image built on Unbuntu 22.04, CUDA 12.1, Python 3.9 and Pytorch for [mmsegmentation](https://github.com/swiss-territorial-data-lab/mmsegmentation/tree/main?tab=readme-ov-file)  
 
 ## Build
 
 `
-docker build -t ub22.04-py3.10 .
+docker build -t mmseg:v0 .
 `
-
-### Build with poetry dependency
-
-1. Place the pyproject.toml of your project near the Dockerfile
-2. Uncomment the 5 lines under `# Install dep with poetry` in the dockerfile
-3. Run the docker build command
 
 ## Run
 
 `
-docker run -it --rm  --name my_docker  ub22.04-py3.10
+docker run -it -v /mnt/:/mnt/ --gpus all --ipc=host --privileged mmseg:v0
 `
+
+ **-v**: mount the storage on host machine to the docker contrainer
+
+ **--gpus**: assign GPU access to container
+
+    e.g. --gpus '"device=0,1,2,3"'
+
+ **--ipc**: share host memory between containers 
+
+ **--privileged**: grants root capabilities to all devices on the host system.
+
+    e.g. Necessary when mount S3 bucket

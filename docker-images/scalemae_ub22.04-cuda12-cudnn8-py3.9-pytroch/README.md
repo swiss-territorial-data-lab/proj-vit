@@ -1,27 +1,27 @@
-# ub22.04-cuda12-cudnn8-py3.10-pytorch
+# scalemae_ub22.04-cuda12-cudnn8-py3.9-pytroch
 
-Image ubuntu 22.04, cuda 12.1.1, cudnn8, avec python 3.10, pip et torch
+Docker image built on Unbuntu 22.04, CUDA 12.1, Python 3.9 and Pytorch for [scaleMAE](https://github.com/swiss-territorial-data-lab/scale-mae/tree/main)  
 
 ## Build
 
 `
-docker build -t ub22.04-cuda12-cudnn8-py3.10 .
+docker build -t scale_mae:v0 .
 `
-
-### Build with poetry dependency
-
-1. Place the pyproject.toml of your project near the Dockerfile
-2. Uncomment the 5 lines under `# Install dep with poetry` in the dockerfile
-3. Run the docker build command
 
 ## Run
 
-To use your gpu(s) you need: (more details in the main README.md)
-1. To install the nvidia driver
-2. To install the nvidia docker runtime
-3. To add the option `--gpus all` when running your container
-
-
 `
-docker run -it --rm  --name my_docker --gpus all  ub22.04-cuda12-cudnn8-py3.10-pytorch
+docker run -it -v /mnt/:/mnt/ --gpus all --ipc=host --privileged scale_mae:v0
 `
+
+ **-v**: mount the storage on host machine to the docker contrainer
+
+ **--gpus**: assign GPU access to container
+
+    e.g. --gpus '"device=0,1,2,3"'
+
+ **--ipc**: share host memory between containers 
+
+ **--privileged**: grants root capabilities to all devices on the host system.
+
+    e.g. Necessary when mount S3 bucket
