@@ -10,7 +10,10 @@ This repository is the implementation of STDL Vision Transformer project in coll
 - [Data Preparation](#data-preparation)
 - [Pretraining](#pretraining)
 - [Pretrained Models](#pretrained-models)
-- [Fine-tuning](#finetuning)
+- [Downstream Experiments](#downstream-experiments)
+    - [Linear Probing](#linear-probing)
+    - [Fine-tuning](#finetuning)
+    - [Ablation Studies](#ablation-studies)
 
 
 ## Requirements
@@ -42,7 +45,7 @@ Please refer to [here](./dataset_preparation/dataset_preparation.md) for the det
 
 ## Pretrain 
 
-We forked and modified [Scale-MAE](https://github.com/bair-climate-initiative/scale-mae) to pertrain the Vision Transformer with 5-band images. All the Experiments are conducted with docker. To launch the docker container, run following command:
+We forked and modified [Scale-MAE](https://github.com/bair-climate-initiative/scale-mae) to pertrain the Vision Transformer with 5-band images (RGB, NIR and nDSM). The pretraining was implemented with docker. To launch the docker container, run following command:
 
 ```
 cd docker-images/scalemae_ub22.04-cuda12-cudnn8-py3.9-pytroch
@@ -57,7 +60,7 @@ cd /scale-mae/mae
 wget https://github.com/bair-climate-initiative/scale-mae/releases/download/base-800/scalemae-vitlarge-800.pth
 ```
 
-Then, download the dataset:
+Then, download the *RS Pretrain* dataset:
 
 ```
 cd /scale-mae/mae/data 
@@ -78,16 +81,17 @@ torchrun --standalone --nnodes=1 --nproc-per-node=${GPU_NUM} main_pretrain.py --
 ``` 
 This script accepts arguments for detailed training configuration, referring to [here](https://github.com/swiss-territorial-data-lab/scale-mae/blob/1db755a5b591c49f5ee983708b7244f461acd7f6/mae/main_pretrain.py#L58).
  
-Once the training is finished, the pretrained weights are stored in `mae/output_dir/checkpoint-latest.pth`
+Once the training terminates, the pretrained weights are stored in `mae/output_dir/checkpoint-latest.pth`
 
 ## Pretrained Models
 
 For the pretrained weights, the name of the layers might not be consistent between different implementation, e.g., Scale-MAE and MMsegmentation. We converted the key in the `state_dict` and only loaded the encoder (backbone) from these pretrained model. Here are the converted models:
 
 
-* 5-band RS imagery: [**Scale-MAE pretrained model**](https://data.stdl.ch/proj-vit/weights/vit-large-scalemae-pretrained-rs-5bands.pth)
+* 5-band Remote Sensing imagery: [**Scale-MAE pretrained model**](https://data.stdl.ch/proj-vit/weights/vit-large-scalemae-pretrained-rs-5bands.pth)
 * 3-band Natural imagery: [**ImageNet-22K pretrained ViT-L Encoder**](https://data.stdl.ch/proj-vit/weights/vit-large-p16_in21k-pre-3rdparty_ft-in1k-384-mmseg.pth)
 
+*Note: the 3-band Natural imagery pretrained encoder is first training with self-supervised learning (MIM) on ImageNet-21K and further trained with supervised learning (scene classification) on ImageNet-1K. See the [reference](https://github.com/open-mmlab/mmpretrain/tree/main/configs/vision_transformer).*
 
 ## Downstream Experiments 
 
@@ -108,8 +112,8 @@ conda activate mmseg
 wget -r -np -nH --cut-dirs=1 https://data.stdl.ch/proj-vit/weights/
 
 cd /mmsegmentation/data
-wget -r -np -nH --cut-dirs=2 -R index.html https://data.stdl.ch/proj-vit/dataset/flair/
-wget -r -np -nH --cut-dirs=2 -R index.html https://data.stdl.ch/proj-vit/dataset/STDL-SOILS/
+wget -r -np -nH --cut-dirs=2 https://data.stdl.ch/proj-vit/dataset/flair/
+wget -r -np -nH --cut-dirs=2 https://data.stdl.ch/proj-vit/dataset/STDL-SOILS/
 ```
 
 ### Linear Probing
@@ -121,13 +125,13 @@ cd /mmsegmentation
 export PRETRAINED_WEIGHTS='weights/vit-large-scalemae-pretrained-rs-5bands.pth'
 export WORK_DIR_PATH='work_dirs/linprobe-vit-l-5bands_upernet_4xb4-20k_flair-224x224'
 
-python tools/train.py configs/vit_flair/linprobe-vit-l-5bands_upernet_4xb4-20k_flair-224x224.py --cfg-options model.backbone.init_cfg.checkpoint=${PRETRAINED_WEIGHTS} --work-dir ${WORK_DIR_PATH}
+python tools/train.py configs/vit_flair/vit-l-5bands_upernet_4xb4-160k_flair-224x224.py --cfg-options model.backbone.init_cfg.checkpoint=${PRETRAINED_WEIGHTS} model.backbone.frozen_exclude=[] --work-dir ${WORK_DIR_PATH}
 ```
 
 If training with multiple GPUs, issue the following code:
 
 ```
-bash tools/dist_train.sh configs/vit_flair/linprobe-vit-l-5bands_upernet_4xb4-20k_flair-224x224.py ${GPU_NUM} --cfg-options model.backbone.init_cfg.checkpoint=${PRETRAINED_WEIGHTS} --work-dir ${WORK_DIR_PATH}
+bash tools/dist_train.sh configs/vit_flair/vit-l-5bands_upernet_4xb4-160k_flair-224x224.py ${GPU_NUM} --cfg-options model.backbone.init_cfg.checkpoint=${PRETRAINED_WEIGHTS} model.backbone.frozen_exclude=[] --work-dir ${WORK_DIR_PATH}
 ```
 
 
@@ -140,18 +144,87 @@ tensorboard --logdir ${WORK_DIR_PATH}/${yyyymmdd_hhmmss}/vis_data/
 
 ### Finetuning
 
-To achieve optimal performance, both the encoder and decoder can be fine-tuned together despite linear probing. We employed finetuning on the FLAIR and SOILS dataset to explore the benefit from pretraining on large-scale remote sensing images and additional bands. To study the impact of multi-modal inputs and pretraining with remote sensing imagery, we also conducted ablation studies on FLAIR dataset.  
+To achieve optimal performance, both the encoder and decoder can be fine-tuned together despite linear probing. We employed finetuning on the FLAIR and SOILS dataset to explore the benefit from pretraining on large-scale remote sensing images and additional bands. 
 
-### STDL SOILS
+Finetune the 5-band model with encoder pretrained by Scale-MAE and *RS Pretrain* dataset:
 
-Finetune the model with encoder pretrained by Scale-MAE and RS Pretrain:
+#### STDL SOILS
+
+```
+export PRETRAINED_WEIGHTS='weights/vit-large-scalemae-pretrained-rs-5bands.pth'
+export WORK_DIR_PATH='work_dirs/finetune_vit-l16-ln_mln_upernet_4xb4-160k_soils-512x512'
+
+python tools/train.py configs/stdl_soils/finetune_vit-l_upernet_4xb4-160k_soils-512x512.py --cfg-options model.backbone.init_cfg.type='Pretrained' model.backbone.init_cfg.checkpoint=${PRETRAINED_WEIGHTS} --work-dir ${WORK_DIR_PATH}
 ```
 
+#### FLAIR #1 
+
+Model with small window size (224x224):
+```
+export PRETRAINED_WEIGHTS='weights/vit-large-scalemae-pretrained-rs-5bands.pth'
+export WORK_DIR_PATH='work_dirs/finetune_vit-l-5bands_upernet_4xb4-160k_flair-224x224'
+
+python tools/train.py configs/vit_flair/vit-l-5bands_upernet_4xb4-160k_flair-224x224.py --cfg-options model.backbone.init_cfg.type='Pretrained' model.backbone.init_cfg.checkpoint=${PRETRAINED_WEIGHTS} --work-dir ${WORK_DIR_PATH}
 ```
 
+Model with large window size (512x512):
+```
+export PRETRAINED_WEIGHTS='weights/vit-large-scalemae-pretrained-rs-5bands.pth'
+export WORK_DIR_PATH='work_dirs/finetune_vit-l-5bands_upernet_4xb4-160k_flair-512x512'
 
-### FLAIR challenge 
-To conduct the ablation study Experiments, run
+python tools/train.py configs/vit_flair/vit-l-5bands_upernet_4xb4-160k_flair-base.py --cfg-options model.backbone.init_cfg.type='Pretrained' model.backbone.init_cfg.checkpoint=${PRETRAINED_WEIGHTS} --work-dir ${WORK_DIR_PATH}
+```
 
+Model with 5-band Photometric Distortion augmentation (Brightness / Contrast Scaling / Gaussine Noise):
+```
+export PRETRAINED_WEIGHTS='weights/vit-large-scalemae-pretrained-rs-5bands.pth'
+export WORK_DIR_PATH='work_dirs/PhotoAug_vit-l-5bands_upernet_4xb4-160k_flair-512x512'
 
+python tools/train.py configs/vit_flair/aug_vit-l-5bands_upernet_4xb4-160k_flair-512x512.py --cfg-options model.backbone.init_cfg.type='Pretrained' model.backbone.init_cfg.checkpoint=${PRETRAINED_WEIGHTS} --work-dir ${WORK_DIR_PATH}
+```
 
+### Ablation Studies
+
+To study the impact of multi-modal inputs and pretraining with remote sensing imagery respectively, we conducted ablation studies on FLAIR dataset. Two base template file are configured for [3-band](https://github.com/swiss-territorial-data-lab/mmsegmentation/blob/main/configs/vit_flair/vit-l-3bands_upernet_4xb4-160k_flair-base.py) and [5-band](https://github.com/swiss-territorial-data-lab/mmsegmentation/blob/main/configs/vit_flair/vit-l-5bands_upernet_4xb4-160k_flair-base.py) model.  
+
+The baseline model is trained from scratch with a truncated normal initialization:
+
+```
+# 3-band scratch initialization 
+export WORK_DIR_PATH='work_dirs/ablation-3bands-scratch-init'
+python tools/train.py configs/vit_flair/vit-l-3bands_upernet_4xb4-160k_flair-base.py --work-dir ${WORK_DIR_PATH}
+
+# 5-band scratch initialization 
+export WORK_DIR_PATH='work_dirs/ablation-5bands-scratch-init'
+python tools/train.py configs/vit_flair/vit-l-5bands_upernet_4xb4-160k_flair-base.py --work-dir ${WORK_DIR_PATH}
+```
+
+Models with encoder pretrained by 5-band remote sensing imagery:
+
+```
+export PRETRAINED_WEIGHTS='weights/vit-large-scalemae-pretrained-rs-5bands.pth'
+
+# 3-band RS pretrained 
+export WORK_DIR_PATH='work_dirs/ablation-3bands-rs-init'
+python tools/train.py configs/vit_flair/vit-l-3bands_upernet_4xb4-160k_flair-base.py --cfg-options model.backbone.init_cfg.type='Pretrained_Part' model.backbone.init_cfg.checkpoint=${PRETRAINED_WEIGHTS} --work-dir ${WORK_DIR_PATH}
+
+# 5-band RS pretrained 
+export WORK_DIR_PATH='work_dirs/ablation-5bands-rs-init'
+python tools/train.py configs/vit_flair/vit-l-5bands_upernet_4xb4-160k_flair-base.py --cfg-options model.backbone.init_cfg.type='Pretrained' model.backbone.init_cfg.checkpoint=${PRETRAINED_WEIGHTS} --work-dir ${WORK_DIR_PATH}
+```
+*Note: when loading the 5-band pretrained encoder weights to 3-band model, only weights for RGB channels are used.*
+
+Models with encoder pretrained by 3-band natural imagery:
+
+```
+export PRETRAINED_WEIGHTS='weights/vit-large-p16_in21k-pre-3rdparty_ft-in1k-384-mmseg.pth'
+
+# 3-band natural pretrained 
+export WORK_DIR_PATH='work_dirs/ablation-5bands-natural-init'
+python tools/train.py configs/vit_flair/vit-l-3bands_upernet_4xb4-160k_flair-base.py --cfg-options model.backbone.init_cfg.type='Pretrained' model.backbone.init_cfg.checkpoint=${PRETRAINED_WEIGHTS} --work-dir ${WORK_DIR_PATH}
+
+# 5-band natural pretrained 
+export WORK_DIR_PATH='work_dirs/ablation-5bands-natural-init'
+python tools/train.py configs/vit_flair/vit-l-5bands_upernet_4xb4-160k_flair-base.py --cfg-options model.backbone.init_cfg.type='Pretrained_Part' model.backbone.init_cfg.checkpoint=${PRETRAINED_WEIGHTS} --work-dir ${WORK_DIR_PATH}
+```
+*Note: when loading the 3-band pretrained encoder weights to 5-band model, random initialization is deployed on the two additional bands! If you want to copy the weigts from optical band, add an extra argment `model.backbone.init_cfg.copy_rgb=True` after `--cfg-options`.*
