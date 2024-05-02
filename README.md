@@ -60,14 +60,16 @@ cd /scale-mae/mae
 wget https://github.com/bair-climate-initiative/scale-mae/releases/download/base-800/scalemae-vitlarge-800.pth
 ```
 
-Then, download the *RS Pretrain* dataset:
+Then, download the *RS Pretrain* dataset in the mounted volume and point the dataset to project folder with soft symbolic link:
 
 ```
-cd /scale-mae/mae/data 
-wget -r -np -nH --cut-dirs=2 -R index.html https://data.stdl.ch/proj-vit/dataset/pretrain_ready/
+cd ${DATA_PATH} 
+wget -r -np -nH --cut-dirs=2 -e robots=off -b https://data.stdl.ch/proj-vit/dataset/pretrain/
+
+ln -s ${DATA_PATH}/pretrain /scale-mae/mae/data/pretrain
 ```
 
-Please make sure there is enough space in mounted volume for downloading the datasets.
+The downloading runs in back-end with `-b`. You can check the progress with `tail -f wget-log`. Please make sure there is enough space in mounted volume for downloading the datasets.
 
 To monitor the training and visualize the prediction of masked image patches, please create a [wandb](https://wandb.ai/site) account and generate a token for authentication. You can also ignore this function when the request for authentication is prompted.
 
@@ -109,12 +111,16 @@ In docker container, following codes initiate the environment and download the d
 
 ```
 conda activate mmseg
-wget -r -np -nH --cut-dirs=1 https://data.stdl.ch/proj-vit/weights/
+wget -r -np -nH -e robots=off --cut-dirs=1 https://data.stdl.ch/proj-vit/weights/
 
-cd /mmsegmentation/data
-wget -r -np -nH --cut-dirs=2 https://data.stdl.ch/proj-vit/dataset/flair/
-wget -r -np -nH --cut-dirs=2 https://data.stdl.ch/proj-vit/dataset/STDL-SOILS/
+cd ${DATA_PATH} 
+wget -r -np -nH -e robots=off --cut-dirs=2 -b https://data.stdl.ch/proj-vit/dataset/flair/
+wget -r -np -nH -e robots=off --cut-dirs=2 -b https://data.stdl.ch/proj-vit/dataset/STDL-SOILS/
+
+ln -s ${DATA_PATH}/flair /mmsegmentation/data/flair
+ln -s ${DATA_PATH}/STDL-SOILS /mmsegmentation/data/STDL-SOILS
 ```
+The downloading runs in back-end with `-b`. You can check the progress with `tail -f wget-log`. Please make sure there is enough space in mounted volume for downloading the datasets.
 
 ### Linear Probing
 
@@ -210,7 +216,7 @@ python tools/train.py configs/vit_flair/vit-l-3bands_upernet_4xb4-160k_flair-bas
 
 # 5-band RS pretrained 
 export WORK_DIR_PATH='work_dirs/ablation-5bands-rs-init'
-python tools/train.py configs/vit_flair/vit-l-5bands_upernet_4xb4-160k_flair-base.py --cfg-options model.backbone.init_cfg.type='Pretrained' model.backbone.init_cfg.checkpoint=${PRETRAINED_WEIGHTS} --work-dir ${WORK_DIR_PATH}
+python tools/train.py configs/vit_flair/vit-l-5bands_upernet_4xb4-160k_flair-base.py --cfg-options model.backbone.init_cfg.type='Pretrained_Part' model.backbone.init_cfg.checkpoint=${PRETRAINED_WEIGHTS} --work-dir ${WORK_DIR_PATH}
 ```
 *Note: when loading the 5-band pretrained encoder weights to 3-band model, only weights for RGB channels are used.*
 
@@ -220,11 +226,44 @@ Models with encoder pretrained by 3-band natural imagery:
 export PRETRAINED_WEIGHTS='weights/vit-large-p16_in21k-pre-3rdparty_ft-in1k-384-mmseg.pth'
 
 # 3-band natural pretrained 
-export WORK_DIR_PATH='work_dirs/ablation-5bands-natural-init'
-python tools/train.py configs/vit_flair/vit-l-3bands_upernet_4xb4-160k_flair-base.py --cfg-options model.backbone.init_cfg.type='Pretrained' model.backbone.init_cfg.checkpoint=${PRETRAINED_WEIGHTS} --work-dir ${WORK_DIR_PATH}
+export WORK_DIR_PATH='work_dirs/ablation-3bands-natural-init'
+python tools/train.py configs/vit_flair/vit-l-3bands_upernet_4xb4-160k_flair-base.py --cfg-options model.backbone.init_cfg.type='Pretrained_Part' model.backbone.init_cfg.checkpoint=${PRETRAINED_WEIGHTS} --work-dir ${WORK_DIR_PATH}
 
 # 5-band natural pretrained 
 export WORK_DIR_PATH='work_dirs/ablation-5bands-natural-init'
 python tools/train.py configs/vit_flair/vit-l-5bands_upernet_4xb4-160k_flair-base.py --cfg-options model.backbone.init_cfg.type='Pretrained_Part' model.backbone.init_cfg.checkpoint=${PRETRAINED_WEIGHTS} --work-dir ${WORK_DIR_PATH}
 ```
 *Note: when loading the 3-band pretrained encoder weights to 5-band model, random initialization is deployed on the two additional bands! If you want to copy the weigts from optical band, add an extra argment `model.backbone.init_cfg.copy_rgb=True` after `--cfg-options`.*
+
+
+## Evaluation 
+
+During linear probing / finetuning, the two latest checkpoints and the checkpoint with best mIoU on validation set is saved in the `WORK_DIR_PATH`. To evaluate the model performance on the test set, following code launches inferencing:
+
+```
+# Testing on a single GPU
+python tools/test.py ${CONFIG_FILE} ${CHECKPOINT_FILE} [optional arguments]
+
+# Testing on multiple GPUs
+bash tools/dist_test.sh ${CONFIG_FILE} ${CHECKPOINT_FILE} ${GPU_NUM} [optional arguments]
+```
+
+This tool accepts several optional arguments, including:
+
+--`work-dir`: If specified, results will be saved in this directory. If not specified, the results will be automatically saved to work_dirs/{CONFIG_NAME}.
+
+--`cfg-options`: If specified, the key-value pair in xxx=yyy format will be merged into the config file.
+
+
+Here is an example on FLAIR #1 dataset:
+```
+export CONFIG_FILE='configs/vit_flair/vit-l-5bands_upernet_4xb4-160k_flair-base.py'
+export CHECKPOINT_FILE='weights/rs-pt-vit-l-5bands_upernet_4xb4-flair-512x512.pth'
+export WORK_DIR_PATH='work_dirs/finetune_vit-l-5bands_upernet_4xb4-160k_flair-512x512'
+
+# Testing on a single GPU
+python tools/test.py ${CONFIG_FILE} ${CHECKPOINT_FILE} --work-dir ${WORK_DIR_PATH}
+
+# Testing on multiple GPUs
+bash tools/dist_test.sh ${CONFIG_FILE} ${CHECKPOINT_FILE} ${GPU_NUM}
+```
