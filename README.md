@@ -14,6 +14,7 @@ This repository is the implementation of STDL Vision Transformer project in coll
     - [Linear Probing](#linear-probing)
     - [Fine-tuning](#finetuning)
     - [Ablation Studies](#ablation-studies)
+    - [Evaluation](#evaluation)
 
 
 ## Requirements
@@ -107,7 +108,7 @@ docker build -t mmseg:v0 .
 docker run -it -v /mnt/:/mnt/ --gpus all --ipc=host --privileged mmseg:v0
 ```
 
-In docker container, following codes initiate the environment and download the dataset:
+In docker container, following codes initiate the environment and download the dataset / model weights:
 
 ```
 conda activate mmseg
@@ -236,9 +237,9 @@ python tools/train.py configs/vit_flair/vit-l-5bands_upernet_4xb4-160k_flair-bas
 *Note: when loading the 3-band pretrained encoder weights to 5-band model, random initialization is deployed on the two additional bands! If you want to copy the weigts from optical band, add an extra argment `model.backbone.init_cfg.copy_rgb=True` after `--cfg-options`.*
 
 
-## Evaluation 
+### Evaluation 
 
-During linear probing / finetuning, the two latest checkpoints and the checkpoint with best mIoU on validation set is saved in the `WORK_DIR_PATH`. To evaluate the model performance on the test set, following code launches inferencing:
+During linear probing / finetuning, the two latest checkpoints and the checkpoint with best mIoU on validation set is saved in the `WORK_DIR_PATH`. We publish all the finetuned model weights, which you can find in folder `weights` with previous wget downloading. To evaluate the model performance on the test set, following code launches inferencing:
 
 ```
 # Testing on a single GPU
