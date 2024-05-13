@@ -38,7 +38,7 @@ Note:
 
 ## Data Preparation
 
-Please refer to [here](./dataset_preparation/dataset_preparation.md) for the details about dataset consolidation. The datasets are available through [STDL web service](https://data.stdl.ch/proj-vit/dataset/):
+Please refer to [here](./dataset_preparation/README.md) for the details about dataset consolidation. The datasets are available through [STDL web service](https://data.stdl.ch/proj-vit/dataset/):
 
 1. [RS Pretrain](https://data.stdl.ch/proj-vit/dataset/pretrain_ready/)  (491 GB) 
 2. [FLAIR #1](https://data.stdl.ch/proj-vit/dataset/flair/) (96 GB)
