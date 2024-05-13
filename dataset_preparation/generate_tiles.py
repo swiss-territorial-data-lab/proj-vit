@@ -1,16 +1,27 @@
 import os
+import argparse
 import rasterio
-from rasterio.transform import from_origin
 import numpy as np
+
 from tqdm import tqdm
+from rasterio.transform import from_origin
 
-def segment_and_save_tiles(folder_path, output_folder):
+def main():
+    
+    args = config_parser()
+    
+    input_folder = args.input_folder 
+    output_folder = args.output_folder
+    
     # List all the .tif files in the folder
-    tif_files = [file for file in os.listdir(folder_path) if file.endswith(".tif")]
+    tif_files = [file for file in os.listdir(input_folder) if file.endswith(".tif")]
 
+    # Create the output folder if it doesn't exist
+    os.makedirs(output_folder, exist_ok=True)
+    
     # Process each .tif file
     for tif_file in tqdm(tif_files):
-        tif_file_path = os.path.join(folder_path, tif_file)
+        tif_file_path = os.path.join(input_folder, tif_file)
 
         # Read the original TIFF image
         with rasterio.open(tif_file_path) as src:
@@ -67,16 +78,19 @@ def segment_and_save_tiles(folder_path, output_folder):
                     
                     dst.write(tile)
 
-if __name__ == "__main__":
-    # Specify the folder path containing the .tif files
-    # folder_path = "/mnt/Data2/sli/dataset/img/italy/rgbin/"
-    folder_path = "/mnt/Data2/sli/dataset/img/Scratch_images/agg_images/"
-    # Specify the output folder for the segmented tiles
-    # output_folder = "/mnt/Data2/sli/dataset/pretrain_ready/italy/"
-    output_folder = "/mnt/Data2/sli/dataset/pretrain_ready/geneva/"
 
-    # Create the output folder if it doesn't exist
-    os.makedirs(output_folder, exist_ok=True)
+def config_parser():
+    parser = argparse.ArgumentParser(description="Generate 5 band image tiles in given resolution.")
+    parser.add_argument("--input_folder", 
+                        default="~/dataset/", 
+                        help="Path to 5-band imagery folder")
+    parser.add_argument("--output_folder", 
+                        default="~/dataset/img/tiles/", 
+                        help="Path to output folder")
 
-    # Call the combined function
-    segment_and_save_tiles(folder_path, output_folder)
+    args = parser.parse_args()
+    return args
+
+
+if __name__ == '__main__':
+	main()
