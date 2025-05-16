@@ -23,7 +23,7 @@ This repository is the implementation of STDL Vision Transformer project in coll
 
 * A CUDA-enabled GPU with at least 16GB Memory is required for experiments. 
 
-   5 * NVIDIA A40 (48GB) is used in this project. 
+   4 * NVIDIA A40 (48GB) is used in this project. 
 
 ### Software
 
@@ -38,11 +38,11 @@ Note:
 
 ## Data Preparation
 
-Please refer to [here](./dataset_preparation/README.md) for the details about dataset consolidation. The datasets are available through [STDL web service](https://data.stdl.ch/proj-vit/dataset/):
+Please refer to [here](./dataset_preparation/README.md) for the details about dataset consolidation. Processed datasets in this project are available through [HuggingFace](https://huggingface.co/heig-vd-geo):
 
-1. [RS Pretrain](https://data.stdl.ch/proj-vit/dataset/pretrain_ready/)  (491 GB) 
-2. [FLAIR #1](https://data.stdl.ch/proj-vit/dataset/flair/) (96 GB)
-3. [STDL-SOILS](https://data.stdl.ch/proj-vit/dataset/STDL-SOILS/) (6.4 GB) 
+1. [M3DRS](https://huggingface.co/datasets/heig-vd-geo/M3DRS)  (491 GB) 
+2. [FLAIR #1](https://huggingface.co/datasets/heig-vd-geo/FLAIR1_mmseg) (96 GB)
+3. [STDL-SOILS](https://huggingface.co/datasets/heig-vd-geo/STDL-soils) (6.5 GB) 
 
 ## Pretrain 
 
@@ -54,23 +54,24 @@ docker build -t scale_mae:v0 .
 docker run -it -v /mnt/:/mnt/ --gpus all --ipc=host --privileged scale_mae:v0
 ```
 
-You can replace the `-v /mnt/:/mnt/` to your customized storage path that would be mounted in the container.  After successful initialization, download the pretrained model weights on fMoW dataset:
+You can replace the `-v /mnt/:/mnt/` to your customized storage path that would be mounted in the container.  After successful initialization, download the pretrained model weights from fMoW dataset:
 
 ```
 cd /scale-mae/mae
 wget https://github.com/bair-climate-initiative/scale-mae/releases/download/base-800/scalemae-vitlarge-800.pth
 ```
 
-Then, download the *RS Pretrain* dataset in the mounted volume and point the dataset to project folder with soft symbolic link:
+Then, download the *M3DRS* dataset in the mounted volume and point the dataset to project folder with soft symbolic link:
 
 ```
 cd ${DATA_PATH} 
-wget -r -np -nH --cut-dirs=2 -e robots=off -b https://data.stdl.ch/proj-vit/dataset/pretrain/
+mkdir M3DRS
+# Download the M3DRS dataset from HuggingFace repo following instruction there and decompress all the files
 
-ln -s ${DATA_PATH}/pretrain /scale-mae/mae/data/pretrain
+ln -s ${DATA_PATH}/M3DRS /scale-mae/mae/data/pretrain
 ```
 
-The downloading runs in back-end with `-b`. You can check the progress with `tail -f wget-log`. Please make sure there is enough space in mounted volume for downloading the datasets.
+Please make sure there is enough space in mounted volume for downloading the datasets.
 
 To monitor the training and visualize the prediction of masked image patches, please create a [wandb](https://wandb.ai/site) account and generate a token for authentication. You can also ignore this function when the request for authentication is prompted.
 
@@ -91,8 +92,8 @@ Once the training terminates, the pretrained weights are stored in `mae/output_d
 For the pretrained weights, the name of the layers might not be consistent between different implementation, e.g., Scale-MAE and MMsegmentation. We converted the key in the `state_dict` and only loaded the encoder (backbone) from these pretrained model. Here are the converted models:
 
 
-* 5-band Remote Sensing imagery: [**Scale-MAE pretrained model**](https://data.stdl.ch/proj-vit/weights/vit-large-scalemae-pretrained-rs-5bands.pth)
-* 3-band Natural imagery: [**ImageNet-22K pretrained ViT-L Encoder**](https://data.stdl.ch/proj-vit/weights/vit-large-p16_in21k-pre-3rdparty_ft-in1k-384-mmseg.pth)
+* 5-band Remote Sensing imagery: [**Scale-MAE pretrained model**](https://huggingface.co/heig-vd-geo/M3DRS_pretrained/resolve/main/vit-large-scalemae-pretrained-rs-5bands.pth?download=true)
+* 3-band Natural imagery: [**ImageNet-22K pretrained ViT-L Encoder**](https://huggingface.co/heig-vd-geo/M3DRS_pretrained/resolve/main/vit-large-p16_in21k-pre-3rdparty_ft-in1k-384-mmseg.pth?download=true)
 
 *Note: the 3-band Natural imagery pretrained encoder is first training with self-supervised learning (MIM) on ImageNet-21K and further trained with supervised learning (scene classification) on ImageNet-1K. See the [reference](https://github.com/open-mmlab/mmpretrain/tree/main/configs/vision_transformer).*
 
@@ -108,20 +109,19 @@ docker build -t mmseg:v0 .
 docker run -it -v /mnt/:/mnt/ --gpus all --ipc=host --privileged mmseg:v0
 ```
 
-In docker container, following codes initiate the environment and download the dataset / model weights:
+In docker container, following codes initiate the environment and download the dataset / model weights from above mentioned links and resources. Unzip and organize file structure as reqiured in their documentation.  
+Then, link the downloaded dataset to MMSegmentation codebase:
+
 
 ```
 conda activate mmseg
-wget -r -np -nH -e robots=off --cut-dirs=1 https://data.stdl.ch/proj-vit/weights/
 
 cd ${DATA_PATH} 
-wget -r -np -nH -e robots=off --cut-dirs=2 -b https://data.stdl.ch/proj-vit/dataset/flair/
-wget -r -np -nH -e robots=off --cut-dirs=2 -b https://data.stdl.ch/proj-vit/dataset/STDL-SOILS/
 
 ln -s ${DATA_PATH}/flair /mmsegmentation/data/flair
 ln -s ${DATA_PATH}/STDL-SOILS /mmsegmentation/data/STDL-SOILS
 ```
-The downloading runs in back-end with `-b`. You can check the progress with `tail -f wget-log`. Please make sure there is enough space in mounted volume for downloading the datasets.
+
 
 ### Linear Probing
 
@@ -153,7 +153,7 @@ tensorboard --logdir ${WORK_DIR_PATH}/${yyyymmdd_hhmmss}/vis_data/
 
 To achieve optimal performance, both the encoder and decoder can be fine-tuned together despite linear probing. We employed finetuning on the FLAIR and SOILS dataset to explore the benefit from pretraining on large-scale remote sensing images and additional bands. 
 
-Finetune the 5-band model with encoder pretrained by Scale-MAE and *RS Pretrain* dataset:
+Finetune the 5-band model with encoder pretrained by Scale-MAE and *M3DRS* dataset:
 
 #### STDL SOILS
 
@@ -211,11 +211,11 @@ Models with encoder pretrained by 5-band remote sensing imagery:
 ```
 export PRETRAINED_WEIGHTS='weights/vit-large-scalemae-pretrained-rs-5bands.pth'
 
-# 3-band RS pretrained 
+# 3-band M3DRS pretrained 
 export WORK_DIR_PATH='work_dirs/ablation-3bands-rs-init'
 python tools/train.py configs/vit_flair/vit-l-3bands_upernet_4xb4-160k_flair-base.py --cfg-options model.backbone.init_cfg.type='Pretrained_Part' model.backbone.init_cfg.checkpoint=${PRETRAINED_WEIGHTS} --work-dir ${WORK_DIR_PATH}
 
-# 5-band RS pretrained 
+# 5-band M3DRS pretrained 
 export WORK_DIR_PATH='work_dirs/ablation-5bands-rs-init'
 python tools/train.py configs/vit_flair/vit-l-5bands_upernet_4xb4-160k_flair-base.py --cfg-options model.backbone.init_cfg.type='Pretrained_Part' model.backbone.init_cfg.checkpoint=${PRETRAINED_WEIGHTS} --work-dir ${WORK_DIR_PATH}
 ```
